@@ -1,25 +1,26 @@
 import csv, sys, math, datetime, pickle
 import matplotlib.pyplot as plt
-import numpy as np
-
-args = sys.argv
-
-# add args check
+import numpy
 
 #data structure to store information on each location in relation to a person
 class Location():
-    def __init__(self, x, y):
+    def __init__(self, datetime, x, y):
         self.x = x
         self.y = y
         #coordinates is a list of all the close points included in this location
         self.coordinates = []
         self.coordinates.append([x,y])
         
+        self.avgTimes = datetime.time()
+        self.stdTimes = datetime.time()
         self.avgInterval = 0
-        self.varInterval = 0
+        self.stdInterval = 0
         self.range = 0
         self.times = []
         self.intervals = []
+        
+        #initialized with a time
+        self.addTime(datetime, x, y)
     
     #redefines x and y as the average of all nearby points
     def update(self):
@@ -40,27 +41,39 @@ class Location():
         self.times.append(datetime)
         
     def analyze(self):
+        #get the average time
+        minutes = [(i.hour*60 + i.minute) for i in self.times]
+        taverage = int(numpy.average(minutes))
+        self.avgTimes = datetime.time(taverage/60, taverage%60)
+        
+        #get the standard deviation of times
+        tstd = int(numpy.std(minutes))
+        self.stdTimes = datetime.time(tstd/60, tstd%60)
+        
+        #calc range of visit times, is this one off, several weeks, months?
+        self.range = self.times[-1] - self.times[0]
+        
+        #if there is only one instance then we can't have intervals and there's nothing to change
+        if len(self.times) == 1:
+            return
+        
         #the times need to be sorted because I want to track successive visits
-        sort(self.times)
+        self.times.sort()
         
         #create a list of the intervals between visits
-        for i in range(len(self.times)):
+        for i in range(len(self.times)-1):
             self.intervals.append(self.times[i+1] - self.times[i])
         
         #find the average interval between visits
-        self.avgInterval = sum(intervals) / len(self.times)
+        self.avgInterval = sum(self.intervals, datetime.timedelta(0)) / len(self.times)
         
         #get the variance to see how regular the interval is
-        variance = datetime.timedelta(0)
-        for i in self.intervals:
-            variance += pow((i - self.avgInterval), 2)
-        self.varInterval = variance / len(self.intervals)
+        #Converts to second, gets the variance and then converts back to a timedelta
+        self.stdInterval = datetime.timedelta(seconds=(numpy.std([time.total_seconds() for time in self.intervals])))
         
-        #calc range of visit times, is this one off, several weeks, months?
-        self.range = self.times[len(self.times)-1] - self.times[0]
         
     def close(self, x, y):
-        if (pow((self.x - x), 2) + pow((self.y - y), 2)) < 0.1:
+        if (pow((self.x - x), 2) + pow((self.y - y), 2)) < 0.01:
             return True
         return False
         
@@ -82,7 +95,12 @@ class Person():
                 return
             
         #otherwise add a new location at x
-        self.locations.append(Location(x,y))
+        self.locations.append(Location(time, x, y))
+        
+    #run the analysis on all locations
+    def analyze(self):
+        for location in self.locations:
+            location.analyze()
 
 def createDate(timestamp):
     dateandtime = timestamp.split(" ")
